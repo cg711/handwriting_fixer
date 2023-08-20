@@ -1,26 +1,31 @@
-import cv2
+import cv2 # opencv-python
 import numpy as np
-import pytesseract
-import random
+import pytesseract as pt # tesseract
 from pytesseract import Output
+import random
+import time
 
-## USE RED SHARPIE WHEN DRAWING OUT WORDS
+# arduino 
+import serial # pyserial
 
-MAX_COUNT = 20
+MAX_COUNT = 50
 
+# word bank init
 lines = open("wordlist.txt").read().splitlines()
-
 currentLine = random.choice(lines)
-
 currentCount = 0
 
-# Facetime camera
-cam = cv2.VideoCapture(1)
+# HSV bounds
+lower_green = np.array([40, 100, 100])
+upper_green = np.array([100, 255, 255])
 
+# Facetime camera
+cam = cv2.VideoCapture(0)
 cv2.namedWindow("Handwriting Fixer")
 
+# aruino config
+uno = serial.Serial(port="/dev/cu.usbmodem23401", baudrate=9600, timeout=0.1)
 
-# on button click read
 def onRecognize(d):
     global currentLine
     print(d)
@@ -35,21 +40,18 @@ while True:
     result, image = cam.read()
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    lower_red = np.array([0, 100, 20])
-    upper_red = np.array([10, 255, 255])
-
-    mask = cv2.inRange(hsv, lower_red, upper_red)
+    mask = cv2.inRange(hsv, lower_green, upper_green)
 
     if result:
-        d = pytesseract.image_to_data(mask, output_type=Output.DICT)
+        d = pt.image_to_data(mask, output_type=Output.DICT)
         arr = list(map(lambda x: x.lower(), d["text"]))
-        arr = list(filter(lambda x: x != "" & x != " ", arr))
+        arr = list(filter(lambda x: (x != '') & (x != ' ') & (x.isalnum()), arr)) #(not x.isspace())
         image = cv2.putText(
-            image,
+            mask,
             currentLine,
-            (20, 50),
+            (20, 80),
             cv2.FONT_HERSHEY_SIMPLEX,
-            1,
+            3,
             (255, 255, 0),
             2,
             cv2.LINE_AA,
@@ -65,7 +67,8 @@ while True:
                 if currentCount >= MAX_COUNT:
                     currentCount = 0
                     print("spray time")
-                    ##arduino stuff here
+                    uno.write(bytes(0x1))
+        # conc = np.vstack((mask, image))
         cv2.imshow("Handwriting Fixer", image)
     key = cv2.waitKey(1)
     if key == 0:
